@@ -1,36 +1,29 @@
 local lastPoz = {}
+local visitor = false
 
 CreateThread(function()
-    while true do
-        local bunkers = Shared.bunkers
-        sleep = 1000
-        for i=1, #bunkers do
-
-            local playerCoords = GetEntityCoords(cache.ped)
-            local bunker = bunkers[i].position
-            local bunkerName = bunkers[i].name
-            local price = bunkers[i].price
-
-            local idBunkera = bunkers[i].insideCoords
-            local exitCoords = bunkers[i].exitCoords
-            local stashCoords = bunkers[i].stashCoords
-            local lockerRoom2 = bunkers[i].lockerRoom
-
-            local distance = #(playerCoords - bunker)
-            local distance2 = #(playerCoords - exitCoords)
-            local distance3 = #(playerCoords - stashCoords)
-            local distance4 = #(playerCoords - lockerRoom2)
-
-
-            if distance <= 10 then
-                sleep = 0
-                DrawMarker(2, bunker.x, bunker.y, bunker.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.7, 0.7, 255,  0,  5, 100, false, true, 2, true, false, false, false)
-                if distance <= 2 then
-                    sleep = 0
-                    lib.showTextUI(Shared.Locale.buy)
-                    if IsControlJustPressed(0, 38) then
-                        ESX.TriggerServerCallback("isOwner", function(owner)
-                            if owner then
+    local bunkers = Shared.bunkers
+    for i=1, #bunkers do
+        local bunker = bunkers[i]
+        local spawnCoords = bunker.insideCoords
+        local bunkerName = bunker.name
+        local price = bunker.price
+        local table = {
+            bunkerEntrance = bunker.position,
+            exitCoords = bunker.exitCoords,
+            stashCoords = bunker.stashCoords,
+            lockerRoom = bunker.lockerRoom,
+        }
+        for _,v in pairs(table) do
+            local poFirst = lib.points.new(v, 8, {})
+            function poFirst:nearby()
+                DrawMarker(2, v, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0, 1.0, 200, 20, 20, 50, false, true, 2, nil, nil, false)
+                if self.currentDistance  < 2.0 then
+                    if v == table.bunkerEntrance then 
+                        lib.showTextUI(Shared.Locale.bunker)
+                        if IsControlJustPressed(0, 38) then
+                            self.owner = lib.callback.await('isOwner', false)
+                            if self.owner then
                                 lib.registerContext({
                                     id = 'ownerMenu',
                                     title = "Bunker - " ..bunkerName,
@@ -38,9 +31,9 @@ CreateThread(function()
                                         ["Enter your bunker"] = {
                                             serverEvent = 'enterTheBunker',
                                             args = {
-                                                id = idBunkera,
+                                                spawnCoords = spawnCoords, 
                                                 playerId = GetPlayerServerId(PlayerId()),
-                                                currentPos = playerCoords
+                                                type = "owner"
                                             }
                                         },
                                         ["Sell your bunker"] = {
@@ -60,68 +53,63 @@ CreateThread(function()
                                             args = price
                                         },
                                         ["Preview the bunker"] = {
-                                            event = 'previewin',
-                                            args = idBunkera
+                                            serverEvent = 'enterTheBunker',
+                                            visitor = true,
+                                            args = {spawnCoords = spawnCoords, playerId = GetPlayerServerId(PlayerId()), type = "preview" }
                                         },
                                     }
                                 })
                                 lib.showContext('buyMenu')
                             end
-                        end)
+                        end
+                    elseif v == table.exitCoords then
+                        lib.showTextUI(Shared.Locale.leave)
+                        if IsControlJustPressed(0, 38) then
+                            TriggerServerEvent("leaveTheBunker")
+                        end
+                    elseif v == table.stashCoords and not visitor then
+                        lib.showTextUI(Shared.Locale.stash)
+                        if IsControlJustPressed(0, 38) then
+                            TriggerServerEvent("openStash:bunker")
+                        end
+                    elseif v == table.lockerRoom and not visitor  then
+                        lib.showTextUI(Shared.Locale.wardrobe)
+                        if IsControlJustPressed(0, 38) then
+                            TriggerEvent("openLocker")
+                        end
                     end
-                else
+                end
+                function poFirst:onExit()
                     lib.hideTextUI()
                 end
-            elseif distance2 <= 10 then
-                sleep = 0
-                DrawMarker(2, exitCoords.x, exitCoords.y, exitCoords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.7, 0.7, 255,  0,  5, 100, false, true, 2, true, false, false, false)
-                if distance2 <= 2 then
-                    lib.showTextUI(Shared.Locale.leave)
-                    sleep = 0
-                    if IsControlJustPressed(0, 38) then
-                        TriggerServerEvent("leaveTheBunker")
-                    end
-                else
-                    lib.hideTextUI()
-                end
-            elseif distance3 <= 10 then
-                sleep = 0
-                DrawMarker(2, stashCoords.x, stashCoords.y, stashCoords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.7, 0.7, 255,  0,  5, 100, false, true, 2, true, false, false, false)
-                DrawMarker(2, lockerRoom2.x, lockerRoom2.y, lockerRoom2.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.7, 0.7, 255,  0,  5, 100, false, true, 2, true, false, false, false)
-                if distance3 <= 2 then
-                    sleep = 0
-                    if IsControlJustPressed(0, 38) then
-                        TriggerServerEvent("openStash:bunker")
-                    end
-                end
-                if distance4 <= 2 then
-                    sleep = 0
-                    lib.showTextUI(Shared.Locale.wardrobe)
-                    if IsControlJustPressed(0, 38) then
-                        TriggerEvent("openLocker")
-                        print("slash")
-                    end
-                else
-                    lib.hideTextUI()
-                end
-                break
             end
         end
-        Wait(sleep)
+        break
     end
 end)
 
 RegisterNetEvent("enterTheBunkerClient")
-AddEventHandler("enterTheBunkerClient", function(bunker)
-    lastPoz[#lastPoz+1] = GetEntityCoords(cache.ped)
-    SetEntityCoords(cache.ped, bunker)
+AddEventHandler("enterTheBunkerClient", function(bunker, type)
+    if type == "owner" then 
+        lastPoz[#lastPoz+1] = GetEntityCoords(cache.ped)
+        visitor = false
+        SetEntityCoords(cache.ped, bunker)
+    elseif type == "preview" then 
+        visitor = true
+        lastPoz[#lastPoz+1] = GetEntityCoords(cache.ped)
+        SetEntityCoords(cache.ped, bunker)
+    end
 end)
 
 RegisterNetEvent("leaveTheBunkerClient")
 AddEventHandler("leaveTheBunkerClient", function()
     poz = table.unpack(lastPoz)
-    SetEntityCoords(cache.ped,poz )
-    lastPoz[#lastPoz+1] = nil
+    if poz ~= nil then
+        SetEntityCoords(cache.ped,poz)
+        lastPoz[#lastPoz+1] = nil
+    else
+        SetEntityCoords(Shared.bunkers.position)
+    end
 end)
 
 RegisterNetEvent("openStash:bunker2")
@@ -159,62 +147,60 @@ end)
 
 
 AddEventHandler("openClotihg", function()
-    ESX.TriggerServerCallback('getPlayerDressing', function(dressing)
-        local table = dressing
-        local options = {}
-        for k,v in pairs(table) do
-            options[k] = {
-                title = v,
-                icon = "fa-regular fa-hand-pointer",
-                description = 'Click to take dressing',
-                event = "takeClothing",
-                args = k
-            }
-        end
-        lib.registerContext({
-            id = 'clothing',
-            title = 'Saved clothes',
-            options = options,
-            menu = "clothingMain"
-        })
-        lib.showContext('clothing')
-    end)
+    local dressing = lib.callback.await('getPlayerDressing', false)
+    local table = dressing
+    local options = {}
+    for k,v in pairs(table) do
+        options[k] = {
+            title = v,
+            icon = "fa-regular fa-hand-pointer",
+            description = 'Click to take dressing',
+            event = "takeClothing",
+            args = k
+        }
+    end
+    lib.registerContext({
+        id = 'clothing',
+        title = 'Saved clothes',
+        options = options,
+        menu = "clothingMain"
+    })
+    lib.showContext('clothing')
 end)
+
 
 RegisterNetEvent("takeClothing")
 AddEventHandler("takeClothing", function(v)
     TriggerEvent('skinchanger:getSkin', function(skin)
-        ESX.TriggerServerCallback('getPlayerOutfit', function(clothes)
-            TriggerEvent('skinchanger:loadClothes', skin, clothes)
-            TriggerEvent('esx_skin:setLastSkin', skin)
-            TriggerEvent('skinchanger:getSkin', function(skin)
-                TriggerServerEvent('esx_skin:save', skin)
-            end)
-        end, v)
+        local clothes = lib.callback.await('getPlayerOutfit', false, v)
+        TriggerEvent('skinchanger:loadClothes', skin, clothes)
+        TriggerEvent('esx_skin:setLastSkin', skin)
+        TriggerEvent('skinchanger:getSkin', function(skin)
+            TriggerServerEvent('esx_skin:save', skin)
+        end)
     end)
 end)
 
 AddEventHandler("removeClothing", function()
-    ESX.TriggerServerCallback('getPlayerDressing', function(dressing)
-        local table = dressing
-        local options = {}
-        for k,v in pairs(table) do
-            options[k] = {
-                title = v,
-                icon = "fa-regular fa-hand-pointer",
-                description = 'Click to remove clothing',
-                serverEvent = "clothingRemoveIt",
-                args = k
-            }
-        end
-        lib.registerContext({
-            id = 'clothingRemove',
-            title = 'Remove clothes',
-            options = options,
-            menu = "clothingMain"
-        })
-        lib.showContext('clothingRemove')
-    end)
+    local dressing = lib.callback.await('getPlayerDressing', false)
+    local table = dressing
+    local options = {}
+    for k,v in pairs(table) do
+        options[k] = {
+            title = v,
+            icon = "fa-regular fa-hand-pointer",
+            description = 'Click to remove clothing',
+            serverEvent = "clothingRemoveIt",
+            args = k
+        }
+    end
+    lib.registerContext({
+        id = 'clothingRemove',
+        title = 'Remove clothes',
+        options = options,
+        menu = "clothingMain"
+    })
+    lib.showContext('clothingRemove')
 end)
 
 AddEventHandler("saveMenu", function()
