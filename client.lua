@@ -84,7 +84,6 @@ CreateThread(function()
                 end
             end
         end
-        break
     end
 end)
 
