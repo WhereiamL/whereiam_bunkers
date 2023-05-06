@@ -2,52 +2,61 @@ RegisterServerEvent("buythebunker")
 AddEventHandler("buythebunker", function(price)
     local source = source
     local xPlayer = ESX.GetPlayerFromId(source)
-    local money = xPlayer.getAccount('money').money
-    MySQL.scalar('SELECT owner FROM bunkers WHERE owner = ?', {xPlayer.identifier}, function(ima)
-        if not ima then
+    local identifier = xPlayer.identifier
+
+    ESX.TriggerServerCallback('isOwner', function(isOwner)
+        if not isOwner then
+            local money = xPlayer.getAccount('money').money
+
             if money >= price then
-                MySQL.insert('INSERT INTO bunkers (owner) VALUES (@owner)', { ['@owner'] = xPlayer.identifier}, function(id)
+                MySQL.Async.execute(('INSERT INTO bunkers (owner) VALUES (@owner)', {
+                    ['@owner'] = identifier
+                }, function()
                     xPlayer.removeAccountMoney('money', price)
-                    TriggerClientEvent('esx:showNotification', source, Shared.Locale.successBought.. " " ..price)
+                    local message = string.format(Shared.Locale.successBought, price)
+                    TriggerClientEvent('esx:showNotification', source, message)
                 end)
             else
-                TriggerClientEvent('esx:showNotification', source, Shared.Locale.noMoney.. " " ..price)
+                local message = string.format(Shared.Locale.noMoney, price)
+                TriggerClientEvent('esx:showNotification', source, message)
             end
         else
             TriggerClientEvent('esx:showNotification', source, Shared.Locale.alreadyHas)
         end
-    end)
+    end, identifier)
 end)
-
 
 
 lib.callback.register("isOwner", function(source)
     local xPlayer = ESX.GetPlayerFromId(source)
-    local rez =  MySQL.query.await('SELECT owner FROM bunkers WHERE owner = ?', { xPlayer.identifier })
-    for i=1, #rez do
-        local v = rez[i]
-        if v.owner == xPlayer.identifier then 
-            return true 
-        end
-    end
+    local result = MySQL.Sync.fetchScalar("SELECT owner FROM bunkers WHERE owner = @owner", {
+        ['@owner'] = xPlayer.identifier
+    })
+
+    return result == xPlayer.identifier
 end)
 
 RegisterServerEvent("sellit")
 AddEventHandler("sellit", function(price)
     local source = source
     local xPlayer = ESX.GetPlayerFromId(source)
-    MySQL.scalar('SELECT owner FROM bunkers WHERE owner = ?', {xPlayer.identifier}, function(ima)
-        if ima then
-            MySQL.Async.execute("DELETE FROM bunkers WHERE owner like @owner", { ['@owner'] = xPlayer.identifier }, function(done)
-                if done then
+    local identifier = xPlayer.identifier
+
+    ESX.TriggerServerCallback('isOwner', function(isOwner)
+        if isOwner then
+            MySQL.Async.execute('DELETE FROM bunkers WHERE owner = @owner', {
+                ['@owner'] = identifier
+            }, function(rowsAffected)
+                if rowsAffected > 0 then
                     xPlayer.addAccountMoney('money', price)
-                    TriggerClientEvent('esx:showNotification', source, Shared.Locale.soldFor.. "" ..price)
+                    local message = string.format(Shared.Locale.soldFor, price)
+                    TriggerClientEvent('esx:showNotification', source, message)
                 end
             end)
         else
             TriggerClientEvent('esx:showNotification', source, Shared.Locale.sellErorr)
         end
-    end)
+    end, identifier)
 end)
 
 RegisterServerEvent("enterTheBunker")
@@ -74,18 +83,21 @@ AddEventHandler("openStash:bunker", function()
 end)
 
 lib.callback.register('getPlayerDressing', function(source)
-    local source = source
     local val = promise.new()
     local xPlayer = ESX.GetPlayerFromId(source)
     local labels = {}
-    TriggerEvent('esx_datastore:getDataStore', 'property', xPlayer.identifier, function(store)
-        local count  = store.count('dressing')
-        for i = 1, count, 1 do
-            local entry = store.get('dressing', i)
-            labels[#labels+1] = entry.label
+
+    ESX.TriggerServerCallback('esx_datastore:getDataStore', function(store)
+        store.get('property', xPlayer.identifier, function(data)
+            local count = data.count('dressing')
+            for i = 1, count do
+                local entry = data.get('dressing', i)
+                labels[#labels + 1] = entry.label
+            end
             val:resolve(labels)
-        end
+        end)
     end)
+
     return Citizen.Await(val)
 end)
 
@@ -93,24 +105,39 @@ end)
 lib.callback.register('getPlayerOutfit', function(source, num)
     local retval = promise.new()
     local xPlayer = ESX.GetPlayerFromId(source)
-    TriggerEvent('esx_datastore:getDataStore', 'property', xPlayer.identifier, function(store)
-        local outfit = store.get('dressing', num)
-        retval:resolve(outfit.skin)
+
+    ESX.TriggerServerCallback('esx_datastore:getDataStore', function(store)
+        store.get('property', xPlayer.identifier, function(data)
+            local outfit = data.get('dressing', num)
+            if outfit then
+                retval:resolve(outfit.skin)
+            else
+                retval:reject('Outfit not found')
+            end
+        end)
     end)
+
     return Citizen.Await(retval)
 end)
-
-
 
 RegisterServerEvent('clothingRemoveIt')
 AddEventHandler('clothingRemoveIt', function(label)
     local source = source
     local xPlayer = ESX.GetPlayerFromId(source)
 
-    TriggerEvent('esx_datastore:getDataStore', 'property', xPlayer.identifier, function(store)
-        local dressing = store.get('dressing') or {}
+    ESX.TriggerServerCallback('esx_datastore:getDataStore', function(store)
+        store.get('property', xPlayer.identifier, function(data)
+            local dressing = data.get('dressing') or {}
 
-        table.remove(dressing, label)
-        store.set('dressing', dressing)
+            for i, outfit in ipairs(dressing) do
+                if outfit.label == label then
+                    table.remove(dressing, i)
+                    break
+                end
+            end
+
+            data.set('dressing', dressing)
+        end)
     end)
 end)
+
