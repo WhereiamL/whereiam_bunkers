@@ -1,37 +1,42 @@
-local lastPoz = {}
+local lastPosition = {}
 local visitor = false
 
 CreateThread(function()
     local bunkers = Shared.bunkers
-    for i=1, #bunkers do
+    for i = 1, #bunkers do
         local bunker = bunkers[i]
         local spawnCoords = bunker.insideCoords
         local bunkerName = bunker.name
         local price = bunker.price
-        local table = {
+        local markerData = {
             bunkerEntrance = bunker.position,
             exitCoords = bunker.exitCoords,
             stashCoords = bunker.stashCoords,
             lockerRoom = bunker.lockerRoom,
         }
-        for _,v in pairs(table) do
-            local poFirst = lib.points.new(v, 8, {})
-            function poFirst:nearby()
-                DrawMarker(2, v, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0, 1.0, 200, 20, 20, 50, false, true, 2, nil, nil, false)
-                if self.currentDistance  < 2.0 then
-                    if v == table.bunkerEntrance then 
-                        lib.showTextUI(Shared.Locale.bunker)
+
+        for key, markerPos in pairs(markerData) do
+            local marker = lib.points.new(markerPos, 8, {})
+
+            function marker:nearby()
+                DrawMarker(2, markerPos, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0, 1.0, 200, 20, 20, 50, false, true, 2, nil, nil, false)
+
+                if self.currentDistance < 2.0 then
+                    if markerPos == markerData.bunkerEntrance then
+                        lib.showTextUI(lib.Shared.Locale.bunker)
+
                         if IsControlJustPressed(0, 38) then
-                            self.owner = lib.callback.await('isOwner', false)
-                            if self.owner then
+                            local owner = lib.callback.await('isOwner', false)
+
+                            if owner then
                                 lib.registerContext({
                                     id = 'ownerMenu',
-                                    title = "Bunker - " ..bunkerName,
+                                    title = "Bunker - " .. bunkerName,
                                     options = {
                                         ["Enter your bunker"] = {
                                             serverEvent = 'enterTheBunker',
                                             args = {
-                                                spawnCoords = spawnCoords, 
+                                                spawnCoords = spawnCoords,
                                                 playerId = GetPlayerServerId(PlayerId()),
                                                 type = "owner"
                                             }
@@ -46,69 +51,72 @@ CreateThread(function()
                             else
                                 lib.registerContext({
                                     id = 'buyMenu',
-                                    title = "Bunker - " ..bunkerName,
+                                    title = "Bunker - " .. bunkerName,
                                     options = {
-                                        ["Buy the bunker for " ..price.. " $"] = {
+                                        ["Buy the bunker for " .. price .. " $"] = {
                                             serverEvent = 'buythebunker',
                                             args = price
                                         },
                                         ["Preview the bunker"] = {
                                             serverEvent = 'enterTheBunker',
                                             visitor = true,
-                                            args = {spawnCoords = spawnCoords, playerId = GetPlayerServerId(PlayerId()), type = "preview" }
+                                            args = {
+                                                spawnCoords = spawnCoords,
+                                                playerId = GetPlayerServerId(PlayerId()),
+                                                type = "preview"
+                                            }
                                         },
                                     }
                                 })
                                 lib.showContext('buyMenu')
                             end
                         end
-                    elseif v == table.exitCoords then
-                        lib.showTextUI(Shared.Locale.leave)
+                    elseif markerPos == markerData.exitCoords then
+                        lib.showTextUI(lib.Shared.Locale.leave)
                         if IsControlJustPressed(0, 38) then
                             TriggerServerEvent("leaveTheBunker")
                         end
-                    elseif v == table.stashCoords and not visitor then
-                        lib.showTextUI(Shared.Locale.stash)
-                        if IsControlJustPressed(0, 38) then
-                            TriggerServerEvent("openStash:bunker")
-                        end
-                    elseif v == table.lockerRoom and not visitor  then
-                        lib.showTextUI(Shared.Locale.wardrobe)
-                        if IsControlJustPressed(0, 38) then
-                            TriggerEvent("openLocker")
-                        end
+                elseif markerPos == markerData.stashCoords and not visitor then
+                    lib.showTextUI(lib.Shared.Locale.stash)
+                    if IsControlJustPressed(0, 38) then
+                        TriggerServerEvent("openStash:bunker")
                     end
-                end
-                function poFirst:onExit()
-                    lib.hideTextUI()
+                elseif markerPos == markerData.lockerRoom and not visitor then
+                    lib.showTextUI(lib.Shared.Locale.wardrobe)
+                    if IsControlJustPressed(0, 38) then
+                        TriggerEvent("openLocker")
+                    end
                 end
             end
         end
-        break
+        function marker:onExit()
+            lib.hideTextUI()
+        end
     end
+    break
 end)
 
 RegisterNetEvent("enterTheBunkerClient")
-AddEventHandler("enterTheBunkerClient", function(bunker, type)
-    if type == "owner" then 
-        lastPoz[#lastPoz+1] = GetEntityCoords(cache.ped)
-        visitor = false
-        SetEntityCoords(cache.ped, bunker)
-    elseif type == "preview" then 
-        visitor = true
-        lastPoz[#lastPoz+1] = GetEntityCoords(cache.ped)
-        SetEntityCoords(cache.ped, bunker)
+AddEventHandler("enterTheBunkerClient", function(bunkerPosition, visitType)
+    if visitType == "owner" or visitType == "preview" then
+        lastPosition[cache.ped] = GetEntityCoords(cache.ped)
+        SetEntityCoords(cache.ped, bunkerPosition)
+        if visitType == "owner" then
+            visitor = false
+        elseif visitType == "preview" then
+            visitor = true
+        end
     end
 end)
 
 RegisterNetEvent("leaveTheBunkerClient")
 AddEventHandler("leaveTheBunkerClient", function()
-    poz = table.unpack(lastPoz)
-    if poz ~= nil then
-        SetEntityCoords(cache.ped,poz)
-        lastPoz[#lastPoz+1] = nil
+    local lastPos = lastPosition[cache.ped]
+    if lastPos then
+        SetEntityCoords(cache.ped, lastPos)
+        lastPosition[cache.ped] = nil
     else
-        SetEntityCoords(Shared.bunkers.position)
+        SetEntityCoords(cache.ped, Shared.bunkers.position)
     end
 end)
 
