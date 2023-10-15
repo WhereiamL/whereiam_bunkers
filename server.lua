@@ -9,7 +9,7 @@ AddEventHandler("buythebunker", function(price)
             local money = xPlayer.getAccount('money').money
 
             if money >= price then
-                MySQL.Async.execute(('INSERT INTO bunkers (owner) VALUES (@owner)', {
+                MySQL.Async.execute('INSERT INTO bunkers (owner) VALUES (@owner)', {
                     ['@owner'] = identifier
                 }, function()
                     xPlayer.removeAccountMoney('money', price)
@@ -98,7 +98,7 @@ lib.callback.register('getPlayerDressing', function(source)
         end)
     end)
 
-    return Citizen.Await(val)
+    return Citizen.Await(Val)
 end)
 
 
